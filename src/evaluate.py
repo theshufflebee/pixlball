@@ -311,3 +311,31 @@ def evaluate_3d_model(model, dataset):
     # Calculate Metrics (Accuracy, AUC, etc.)
     # ... [Same logic as your previous evaluation functions] ...
     return all_event_preds, all_goal_probs
+
+
+def get_3d_predictions(model, dataset, device):
+    model.eval()
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
+    
+    all_event_preds = []
+    all_event_targets = []
+    all_goal_probs = []
+    all_goal_targets = []
+    
+    with torch.no_grad():
+        for voxels, event_targets, goal_targets in dataloader:
+            voxels = voxels.to(device)
+            
+            # Forward pass
+            event_logits, goal_probs = model(voxels)
+            
+            # For multi-class (Events), take the argmax
+            event_preds = torch.argmax(event_logits, dim=1)
+            
+            all_event_preds.extend(event_preds.cpu().numpy())
+            all_event_targets.extend(event_targets.numpy())
+            all_goal_probs.extend(goal_probs.cpu().numpy())
+            all_goal_targets.extend(goal_targets.numpy())
+            
+    return np.array(all_event_targets), np.array(all_event_preds), \
+           np.array(all_goal_targets), np.array(all_goal_probs)
