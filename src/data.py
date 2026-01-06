@@ -491,14 +491,17 @@ def assign_lookahead_outcomes(events_df, lookback=6, lookahead=6):
 #Combine Events and 360 Data for NN df
 #-----------------------
 
+
 def prepare_nn_dataset(
         events_df,
         nn_layers_df,
         target_cols=['nn_target'],
         id_col='id',
-        context_cols = False,
+        context_cols=False,
+        temporal_context=True, 
         keep_context_ids=False
     ):
+
     """
     Prepare dataset for NN training by keeping ID + target columns and merging 
     with the NN input layers (360° grids). Optionally keeps match and possession IDs.
@@ -517,33 +520,25 @@ def prepare_nn_dataset(
     # Base columns to keep
     cols_to_keep = [id_col] + target_cols
 
-    # If keeping match & possession context
+    # 1. Add Temporal Context (Ball Trajectory Vector)
+    if temporal_context and 'ball_trajectory_vector' in events_df.columns:
+        cols_to_keep.append('ball_trajectory_vector')
+
+    # 2. If keeping match & possession IDs
     if keep_context_ids:
-        extra_cols = []
-        if 'match_id' in events_df.columns:
-            extra_cols.append('match_id')
-        if 'possession' in events_df.columns:
-            extra_cols.append('possession')
-        cols_to_keep += extra_cols
+        for col in ['match_id', 'possession']:
+            if col in events_df.columns:
+                cols_to_keep.append(col)
         
-        # If keeping context cols
+    # 3. If keeping static context cols
     if context_cols:
-        extra_cols = []
-        if 'under_pressure' in events_df.columns:
-            extra_cols.append('under_pressure')
-        if 'counterpress' in events_df.columns:
-            extra_cols.append('counterpress')
-        if 'dribble_nutmeg' in events_df.columns:
-            extra_cols.append('dribble_nutmeg')
-        cols_to_keep += extra_cols
+        static_features = ['under_pressure', 'counterpress', 'dribble_nutmeg']
+        for feat in static_features:
+            if feat in events_df.columns:
+                cols_to_keep.append(feat)
 
-    # Trim events table
     events_trimmed = events_df[cols_to_keep].drop_duplicates(subset=id_col)
-
-    # Merge with neural net grid layers
-    nn_dataset = nn_layers_df.merge(events_trimmed, on=id_col, how='inner')
-
-    return nn_dataset
+    return nn_layers_df.merge(events_trimmed, on=id_col, how='inner')
 
 
 
