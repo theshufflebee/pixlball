@@ -161,7 +161,7 @@ class TinyCNN_MultiTask_Context_Ball_Vector(nn.Module):
 
 class Tiny3DCNN_MultiTask(nn.Module):
     def __init__(self, num_event_classes=3):
-        super(Tiny3DCNN_MultiTask, self).__init__()
+        torch.nn.Module.__init__(self)
         
         # Input shape: (Batch, 3, 4, 12, 8) -> (Channels, Time, Height, Width)
         

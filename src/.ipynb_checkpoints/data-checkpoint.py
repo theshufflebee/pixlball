@@ -386,56 +386,6 @@ def aggregate_nn_layers_vectorized(df_360, grid_height=12, grid_width=8):
     return nn_layers_df
 
 
-#----------
-# event Data Preprocessing
-#-----------------
-
-def drop_events(events_df, rows_to_drop=None):
-    """
-    Sorts events by match_id and index, and drops non-play administrative events.
-    
-    Parameters:
-        events_df (pd.DataFrame): Events dataframe with columns ['match_id', 'index', 'type', ...]
-        
-    Usage:
-        Statsbomb has the Column 'type' that contains event types. This function drops all rows that are in the supplied events to drop
-    
-    Returns:
-        pd.DataFrame: Cleaned and sorted dataframe
-    """
-    # Define non-play administrative events to drop
-    
-    
-    # Drop administrative events
-    df_cleaned = events_df[~events_df['type'].isin(rows_to_drop)].copy()
-    
-    # Sort by match_id and index to maintain chronological order
-    df_cleaned.sort_values(by=['match_id', 'index'], inplace=True)
-    
-    # Reset index
-    df_cleaned.reset_index(drop=True, inplace=True)
-    print(f"{len(events_df) - len(df_cleaned)} events.")
-    
-    return df_cleaned
-
-
-def drop_columns(df, columns_to_drop):
-    """
-    Drops columns from a DataFrame if they exist.
-    
-    Parameters:
-        df (pd.DataFrame): The input DataFrame.
-        columns_to_drop (list of str): List of column names to remove.
-    
-    Returns:
-        pd.DataFrame: DataFrame with specified columns removed.
-    """
-    cols_to_remove = [col for col in columns_to_drop if col in df.columns]
-    cleaned_df = df.drop(columns=cols_to_remove)
-    return cleaned_df
-
-
-
 def assign_lookahead_outcomes(events_df, lookback=6, lookahead=6):
     """
     Assign outcomes to each event with:
@@ -491,14 +441,17 @@ def assign_lookahead_outcomes(events_df, lookback=6, lookahead=6):
 #Combine Events and 360 Data for NN df
 #-----------------------
 
+
 def prepare_nn_dataset(
         events_df,
         nn_layers_df,
         target_cols=['nn_target'],
         id_col='id',
-        context_cols = False,
+        context_cols=False,
+        temporal_context=True, 
         keep_context_ids=False
     ):
+
     """
     Prepare dataset for NN training by keeping ID + target columns and merging 
     with the NN input layers (360° grids). Optionally keeps match and possession IDs.
@@ -517,33 +470,25 @@ def prepare_nn_dataset(
     # Base columns to keep
     cols_to_keep = [id_col] + target_cols
 
-    # If keeping match & possession context
+    # 1. Add Temporal Context (Ball Trajectory Vector)
+    if temporal_context and 'ball_trajectory_vector' in events_df.columns:
+        cols_to_keep.append('ball_trajectory_vector')
+
+    # 2. If keeping match & possession IDs
     if keep_context_ids:
-        extra_cols = []
-        if 'match_id' in events_df.columns:
-            extra_cols.append('match_id')
-        if 'possession' in events_df.columns:
-            extra_cols.append('possession')
-        cols_to_keep += extra_cols
+        for col in ['match_id', 'possession']:
+            if col in events_df.columns:
+                cols_to_keep.append(col)
         
-        # If keeping context cols
+    # 3. If keeping static context cols
     if context_cols:
-        extra_cols = []
-        if 'under_pressure' in events_df.columns:
-            extra_cols.append('under_pressure')
-        if 'counterpress' in events_df.columns:
-            extra_cols.append('counterpress')
-        if 'dribble_nutmeg' in events_df.columns:
-            extra_cols.append('dribble_nutmeg')
-        cols_to_keep += extra_cols
+        static_features = ['under_pressure', 'counterpress', 'dribble_nutmeg']
+        for feat in static_features:
+            if feat in events_df.columns:
+                cols_to_keep.append(feat)
 
-    # Trim events table
     events_trimmed = events_df[cols_to_keep].drop_duplicates(subset=id_col)
-
-    # Merge with neural net grid layers
-    nn_dataset = nn_layers_df.merge(events_trimmed, on=id_col, how='inner')
-
-    return nn_dataset
+    return nn_layers_df.merge(events_trimmed, on=id_col, how='inner')
 
 
 
@@ -704,3 +649,116 @@ def generate_temporal_voxels(df, lookback=3, grid_cols=['ball_layer', 'teammates
             voxels.append(voxel)
             
     return voxels
+
+
+def event_data_loader(data_events):
+    """
+    Main preprocessing pipeline for cleaning raw event data.
+    """
+    df = data_events.copy()
+    
+    # 1. Define Administrative/Non-Game events to remove
+    admin_events = [
+        'Starting XI', 'Half Start', 'Half End', 'Player On', 'Player Off',
+        'Substitution', 'Tactical Shift', 'Referee Ball-Drop', 'Injury Stoppage',
+        'Bad Behaviour', 'Shield', 'Goal Keeper', 'Pressure', 'Duel'
+    ]
+
+    # 2. Filter rows
+    df = drop_events(df, rows_to_drop=admin_events)
+
+    # 3. Define the specific StatsBomb metadata/detail columns to drop
+    columns_to_drop = [
+        'clearance_body_part', 'clearance_head', 'clearance_left_foot',
+        'clearance_other', 'clearance_right_foot', 'shot_technique',
+        'substitution_replacement_id', 'substitution_replacement',
+        'substitution_outcome', 'shot_saved_off_target', 'pass_miscommunication',
+        'goalkeeper_shot_saved_off_target', 'goalkeeper_punched_out',
+        'shot_first_time', 'shot_body_part', 'related_events',
+        'pass_shot_assist', 'pass_straight', 'pass_switch', 'pass_technique', 
+        'pass_through_ball', 'goalkeeper_body_part', 'goalkeeper_end_location', 
+        'goalkeeper_outcome', 'goalkeeper_position', 'goalkeeper_technique', 
+        'goalkeeper_type', 'goalkeeper_penalty_saved_to_post', 
+        'goalkeeper_shot_saved_to_post', 'goalkeeper_lost_out', 
+        'goalkeeper_Clear', 'goalkeeper_In Play Safe', 'shot_key_pass_id',
+        'shot_one_on_one', 'shot_end_location', 'shot_type', 'pass_angle',
+        'pass_body_part', 'pass_type', 'pass_length', 'pass_outswinging',
+        'pass_inswinging', 'pass_cross', 'pass_cut_back', 'pass_deflected', 
+        'pass_goal_assist', 'pass_recipient', 'pass_recipient_id', 
+        'pass_assisted_shot_id', 'pass_no_touch', 'pass_end_location', 
+        'pass_aerial_won', 'pass_height', 'substitution_outcome_id',
+        'tactics', 'block_deflection', 'dribble_no_touch', 'shot_open_goal', 
+        'shot_saved_to_post', 'shot_redirect', 'shot_follows_dribble',
+        'period', 'injury_stoppage_in_chanin', 'block_save_block',
+        'ball recovery_offensive'
+    ]
+
+    # 4. Drop the columns
+    df = drop_columns(df, columns_to_drop)
+
+    # 5. Assign outcomes (Target variable generation)
+    df = assign_lookahead_outcomes(df, lookahead=6)
+
+    return df
+
+def add_context_cols(nn_df):
+    """
+    Adds static context columns to the NN dataset if they exist.
+    """
+    context_features = ['under_pressure', 'counterpress', 'dribble_nutmeg']
+    for feat in context_features:
+        if feat in nn_df.columns:
+            nn_df[feat] = nn_df[feat].fillna(0).astype(np.float32)
+
+    return nn_df
+
+def add_target_as_int(nn_df):
+    """
+    Maps string target labels to integer indices for NN training.
+    """
+    target_map = {"Keep Possession": 0, "Lose Possession": 1, "Shot": 2}
+
+    # Apply mapping
+    nn_df['nn_target_int'] = nn_df['nn_target'].map(target_map)
+
+    return nn_df
+
+
+def add_ball_coordinates(df, column_name='ball_trajectory_vector'):
+    """
+    Dynamically expands a column of coordinate lists into individual x and y columns.
+    
+    Args:
+        df (pd.DataFrame): The dataset containing the trajectory vectors.
+        column_name (str): The name of the column containing the lists.
+        
+    Returns:
+        pd.DataFrame: The dataframe with new x1, y1, x2, y2... columns added.
+    """
+    if df[column_name].empty:
+        return df
+
+    # 1. Determine the length from the first entry in the data
+    first_vector = df[column_name].iloc[0]
+    vector_length = len(first_vector)
+    num_points = vector_length // 2
+
+    # 2. Generate the column names dynamically: x1, y1, x2, y2...
+    vector_names = [f"{coord}{i}" for i in range(1, num_points + 1) for coord in ['x', 'y']]
+
+    # 3. Expand and concatenate to the original dataframe
+    expanded_coords = pd.DataFrame(
+        df[column_name].tolist(), 
+        index=df.index, 
+        columns=vector_names
+    )
+    
+    df = pd.concat([df, expanded_coords], axis=1)
+    
+    for col in df.columns:
+        if col.startswith('x'):
+            df[col] = df[col] / 120.0  # Scale X to [0, 1]
+        elif col.startswith('y'):
+            df[col] = df[col] / 80.0   # Scale Y to [0, 1]
+    
+    return df, vector_names

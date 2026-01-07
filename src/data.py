@@ -755,4 +755,10 @@ def add_ball_coordinates(df, column_name='ball_trajectory_vector'):
     
     df = pd.concat([df, expanded_coords], axis=1)
     
+    for col in df.columns:
+        if col.startswith('x'):
+            df[col] = df[col] / 120.0  # Scale X to [0, 1]
+        elif col.startswith('y'):
+            df[col] = df[col] / 80.0   # Scale Y to [0, 1]
+    
     return df, vector_names

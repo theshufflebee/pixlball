@@ -158,3 +158,58 @@ class TinyCNN_MultiTask_Context_Ball_Vector(nn.Module):
         
         return event_logits, threat_score
 
+
+class Tiny3DCNN_MultiTask(nn.Module):
+    def __init__(self, num_event_classes=3):
+        torch.nn.Module.__init__(self)
+        
+        # Input shape: (Batch, 3, 4, 12, 8) -> (Channels, Time, Height, Width)
+        
+        # 1. Spatio-Temporal Feature Extractor
+        self.features = nn.Sequential(
+            # Block 1: Capture short-term motion
+            nn.Conv3d(3, 16, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            nn.ReLU(),
+            # We pool spatially but keep Time dimension at 4
+            nn.MaxPool3d(kernel_size=(1, 2, 2)), 
+            
+            # Block 2: Higher level interactions
+            nn.Conv3d(16, 32, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            nn.ReLU(),
+            # Now we pool Time from 4 down to 2, and H/W further
+            nn.MaxPool3d(kernel_size=(2, 2, 2))
+        )
+        
+        # Flattening Calculation:
+        # After Pool 1: (16, 4, 6, 4)
+        # After Pool 2: (32, 2, 3, 2) 
+        # Total: 32 * 2 * 3 * 2 = 384
+        self.flatten_size = 384
+        
+        # 2. Shared Dense Layer
+        self.fc_shared = nn.Sequential(
+            nn.Linear(self.flatten_size, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3)
+        )
+        
+        # 3. Multi-Task Heads
+        self.event_head = nn.Linear(128, num_event_classes)
+        
+        self.goal_head = nn.Sequential(
+            nn.Linear(128, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # x shape: (B, 3, 4, 12, 8)
+        x = self.features(x)
+        x = x.view(x.size(0), -1) # Flatten to (B, 384)
+        x = self.fc_shared(x)
+        
+        event_logits = self.event_head(x)
+        goal_prob = self.goal_head(x)
+        
+        return event_logits, goal_prob.squeeze(-1)
