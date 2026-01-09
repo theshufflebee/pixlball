@@ -57,7 +57,6 @@ class ContextPitchDatasetMultiTask(Dataset):
         # CRITICAL: Return four items now
         return self.layers[idx], self.context_features[idx], self.event_targets[idx], self.goal_flags[idx]
     
-# src/dataset.py
 
 class ContextBallVectorPitchDatasetMultiTask(Dataset):
     def __init__(self, nn_layers_df, event_targets, goal_flags, contextual_features_df):
