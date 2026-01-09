@@ -94,19 +94,25 @@ class ContextBallVectorPitchDatasetMultiTask(Dataset):
 class VoxelPitchDataset(Dataset):
     def __init__(self, df, voxel_col='temporal_voxel'):
         self.df = df
-        # Extract the voxels into a single numpy array for speed
-        # voxels are already (3, 4, 12, 8) from your function
-        self.voxels = np.stack(df[voxel_col].values).astype(np.float32)
         
+        # 1. Memory Win: Store as uint8 (1 byte per element instead of 4)
+        # We stack the voxels but keep them as small integers
+        self.voxels = np.stack(df[voxel_col].values).astype(np.uint8)
+        
+        # 2. Convert targets to tensors once during init for speed
         self.event_targets = torch.tensor(df['nn_target_int'].values, dtype=torch.long)
         self.goal_targets = torch.tensor(df['goal_flag'].values, dtype=torch.float32)
 
     def __len__(self):
-        return len(self.df)
+        return len(self.voxels)
 
     def __getitem__(self, idx):
+        # 3. Cast to float32 only for the specific batch item being loaded
+        # This keeps the total 'active' float memory very small
+        voxel_tensor = torch.from_numpy(self.voxels[idx]).float()
+        
         return (
-            torch.tensor(self.voxels[idx]), 
+            voxel_tensor, 
             self.event_targets[idx], 
             self.goal_targets[idx]
         )

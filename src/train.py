@@ -56,11 +56,86 @@ def get_threat_model_and_criteria(model_type, event_class_weights, goal_pos_weig
     return model, criterion_event, criterion_goal
 
 
+
+import torch
+import torch.nn as nn
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+import src.config as config
+
+def train_multi_task_model(
+    model, 
+    train_loader, 
+    criterion_event, 
+    criterion_goal, 
+    epochs = config.NUM_EPOCHS,
+    model_name="Model",
+    lr = config.LR
+):
+    """
+    A single unified training function for:
+    - Base CNN (X)
+    - Context CNN (X, context)
+    - 3D CNN (voxels)
+    """
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    model.to(config.DEVICE)
+    model.train()
+
+    for epoch in range(epochs):
+        loop = tqdm(train_loader, desc=f"{model_name} Epoch {epoch+1}")
+        
+        for batch in loop:
+            # Step 1: Dynamic Unpacking
+            # Handles (X, ev, gl) OR (X, ctx, ev, gl)
+            if len(batch) == 3:
+                inputs, event_labels, goal_flags = batch
+                inputs = inputs.to(config.DEVICE)
+                forward_args = [inputs]
+            else:
+                inputs, context, event_labels, goal_flags = batch
+                inputs = inputs.to(config.DEVICE)
+                context = context.to(config.DEVICE)
+                forward_args = [inputs, context]
+
+            event_labels = event_labels.to(config.DEVICE)
+            goal_flags = goal_flags.to(config.DEVICE)
+
+            # Step 2: Training Step
+            optimizer.zero_grad()
+            
+            # Forward pass using unpacked arguments
+            event_logits, goal_logits = model(*forward_args)
+            
+            # Event Loss
+            loss_event = criterion_event(event_logits, event_labels)
+            
+            # Masked Goal Loss (Only for Shots/Class 2)
+            shot_mask = (event_labels == 2)
+            if shot_mask.any():
+                loss_goal = criterion_goal(
+                    goal_logits[shot_mask].view(-1), 
+                    goal_flags[shot_mask].view(-1)
+                )
+            else:
+                loss_goal = torch.tensor(0.0, device=config.DEVICE)
+            
+            # Combined Loss
+            loss = loss_event + config.LAMBDA_GOAL * loss_goal
+            
+            loss.backward()
+            optimizer.step()
+            
+            loop.set_postfix(loss=f"{loss.item():.4f}", ev_loss=f"{loss_event.item():.4f}")
+
+    return model
+
+
 # ---------------------------------------------------------
 # Training Functions
 # ---------------------------------------------------------
 
-def train_model_base_threat(dataset, event_class_weights, goal_pos_weight, loss_type='CE'):
+def train_model_base_threat(dataset, event_class_weights, goal_pos_weight, loss_type='Focal'):
     """Trains the TinyCNN_MultiTask_Threat model (Static Baseline)."""
     
     model, criterion_event, criterion_goal = get_threat_model_and_criteria(
@@ -159,7 +234,7 @@ def train_3d_model_alt(
     goal_pos_weight, 
     epochs=config.NUM_EPOCHS, 
     batch_size=config.BATCH_SIZE, 
-    lr=config.LR,
+    lr=config.LR_3D,
     loss_type='Focal'
 ):
     """

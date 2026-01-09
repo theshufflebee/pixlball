@@ -623,9 +623,9 @@ def generate_temporal_voxels(df, lookback=3, grid_cols=['ball_layer', 'teammates
     
     for _, group in grouped:
         # Pre-stack the layers for the entire match: shape (N_events, 3, 12, 8)
+        # uint8 because otherwise nuvolos crashes due to high memory demand
         group_grids = np.stack([
-            np.stack(group[col].values) for col in grid_cols
-        ], axis=1) 
+            np.stack(group[col].values).astype(np.uint8) for col in grid_cols], axis=1) 
         
         num_events = len(group)
         window_size = lookback + 1
@@ -639,7 +639,7 @@ def generate_temporal_voxels(df, lookback=3, grid_cols=['ball_layer', 'teammates
             else:
                 # Boundary case (start of match): Pad with zeros
                 padding_size = abs(start_idx)
-                padding = np.zeros((padding_size, 3, 12, 8), dtype=np.float32)
+                padding = np.zeros((padding_size, 3, 12, 8), dtype=np.uint8)
                 available_frames = group_grids[0 : i + 1]
                 voxel = np.concatenate([padding, available_frames], axis=0)
             

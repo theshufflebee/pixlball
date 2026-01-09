@@ -158,58 +158,50 @@ class TinyCNN_MultiTask_Context_Ball_Vector(nn.Module):
         
         return event_logits, threat_score
 
-
+    
 class Tiny3DCNN_MultiTask(nn.Module):
     def __init__(self, num_event_classes=3):
-        torch.nn.Module.__init__(self)
+        super(Tiny3DCNN_MultiTask, self).__init__()
         
-        # Input shape: (Batch, 3, 4, 12, 8) -> (Channels, Time, Height, Width)
+        # Input shape: (Batch, 3, 4, 12, 8)
         
-        # 1. Spatio-Temporal Feature Extractor
         self.features = nn.Sequential(
-            # Block 1: Capture short-term motion
+            # Block 1
             nn.Conv3d(3, 16, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.ReLU(),
-            # We pool spatially but keep Time dimension at 4
+            nn.BatchNorm3d(16),  # CRITICAL: Stabilizes the voxel activations
+            nn.LeakyReLU(0.1),
             nn.MaxPool3d(kernel_size=(1, 2, 2)), 
             
-            # Block 2: Higher level interactions
+            # Block 2
             nn.Conv3d(16, 32, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.ReLU(),
-            # Now we pool Time from 4 down to 2, and H/W further
+            nn.BatchNorm3d(32),  # CRITICAL: Prevents gradient collapse
+            nn.LeakyReLU(0.1),
             nn.MaxPool3d(kernel_size=(2, 2, 2))
         )
         
-        # Flattening Calculation:
-        # After Pool 1: (16, 4, 6, 4)
-        # After Pool 2: (32, 2, 3, 2) 
-        # Total: 32 * 2 * 3 * 2 = 384
-        self.flatten_size = 384
+        self.flatten_size = 32 * 2 * 3 * 2 # 384
         
-        # 2. Shared Dense Layer
         self.fc_shared = nn.Sequential(
             nn.Linear(self.flatten_size, 128),
-            nn.ReLU(),
-            nn.Dropout(0.3)
+            nn.BatchNorm1d(128), # Stabilize the dense layer
+            nn.LeakyReLU(0.1),
+            nn.Dropout(0.4)      # Increased slightly to prevent "lazy" learning
         )
         
-        # 3. Multi-Task Heads
         self.event_head = nn.Linear(128, num_event_classes)
         
         self.goal_head = nn.Sequential(
             nn.Linear(128, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1),
-            nn.Sigmoid()
+            nn.LeakyReLU(0.1),
+            nn.Linear(32, 1) # Removed Sigmoid here if using BCEWithLogitsLoss
         )
 
     def forward(self, x):
-        # x shape: (B, 3, 4, 12, 8)
         x = self.features(x)
-        x = x.view(x.size(0), -1) # Flatten to (B, 384)
+        x = x.view(x.size(0), -1) 
         x = self.fc_shared(x)
         
         event_logits = self.event_head(x)
-        goal_prob = self.goal_head(x)
+        goal_logits = self.goal_head(x) # Outputting raw logits is better for torch loss
         
-        return event_logits, goal_prob.squeeze(-1)
+        return event_logits, goal_logits.squeeze(-1)
