@@ -1,48 +1,25 @@
+This repository contains a multi-task deep learning framework designed to quantify possession utility in
+professional football using StatsBomb data.
+
 pixlball/
-├─ src/                 # This contains everything concerning the project happens
-│  ├─ config.py         # constants, paths, hyperparameters
-│  ├─ data.py           # data loading & preprocessing
-│  ├─ dataset.py        # Dataset classes
-│  ├─ evaluate.py       # evaluation functions
-│  ├─ losses.py       # loss functions
-│  ├─ model.py          # CNN / model definitions
-│  ├─ plotfunctions.py       # plot functions
-│  ├─ train.py          # training loop function
-│  ├─ utils.py          # helper functions, plotting, etc.
-│  ├─ xt_benchmark_gen.py          # contains all the functions to recreate the expected threat benchmark
-├─ data/                # raw and processed data
-│  ├─ events_data.parquet         # Event level Data downloaded via the statsbomb API
-│  ├─ sb360_data.parquet           # Statsbomb 360 data downloaded via the statsbomb API
-├─ notebooks/           # optional working notebooks
-│  ├─          
-│  ├─  10_run...
-├─ requirements.txt
-├─ notes_to_self.txt
-├─ README.md # this fule
-└─ main.py              # script to run the full workflow (tbd)
-
-
-
-
-
-Config contains
-    all global variables
-    data patj
-    
-data.py contains
-    all data processing
-    
-dataset.py contains
-    all dataset classes for py torch
-    
-    
-model.py contains
-    all model rchiteture
-    
-train.py contains
-    all training loops and model setups
-
-evaluate_model.py contains
-    all metrics and evaluation setups
-
-    
+├─ src/                     # Core project source code
+│  ├─ config.py             # Constants, paths, and hyperparameters
+│  ├─ data.py               # Data loading and cleaning pipeline
+│  ├─ dataset.py            # PyTorch Dataset classes (Spatial, Kinetic, and 3D)
+│  ├─ evaluate.py           # Evaluation suite (Recall, Balanced Acc, Goal AUC)
+│  ├─ losses.py             # Custom Focal Loss for class imbalance
+│  ├─ model.py              # CNN definitions (Baseline, Context, Kinetic, Voxel)
+│  ├─ plotfunctions.py      # Visualizations (Confusion Matrices, xT Maps)
+│  ├─ train.py              # Unified training loop with masked loss logic
+│  ├─ utils.py              # Path management and grid assignment
+│  └─ xt_benchmark_gen.py   # Expected Threat (xT) baseline comparison
+├─ data/                    # Local storage (Ignored by Git)
+│  ├─ events_data.parquet   # Raw StatsBomb event data
+│  └─ sb360_data.parquet    # Raw StatsBomb 360 spatial data
+├─ notebooks/               # Experimental Jupyter Notebooks
+│  ├─ 00_setup.ipynb        # Initial environment and data check
+│  ├─ 01_MASTER.ipynb       # Main execution script and results generator
+│  ├─ figures/              # Generated plots and confusion matrices
+│  └─ model_comparison_table.csv # Final exported metrics
+├─ requirements.txt         # Project dependencies (frozen for replicability)
+└─ main.py                  # Script to run the full workflow
