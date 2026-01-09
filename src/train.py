@@ -135,6 +135,7 @@ def train_multi_task_model(
 # Training Functions
 # ---------------------------------------------------------
 
+# CAN BE DELETET NOT USED ANYMORE
 def train_model_base_threat(dataset, event_class_weights, goal_pos_weight, loss_type='Focal'):
     """Trains the TinyCNN_MultiTask_Threat model (Static Baseline)."""
     
@@ -171,6 +172,7 @@ def train_model_base_threat(dataset, event_class_weights, goal_pos_weight, loss_
     return model
 
 
+# CAN BE DELETET NOT USED ANYMORE
 def train_model_context_threat(dataset, event_class_weights, goal_pos_weight, num_context_features=8, loss_type='Focal'):
     """
     Unified training function for Contextual CNNs. 
@@ -227,86 +229,6 @@ def train_model_context_threat(dataset, event_class_weights, goal_pos_weight, nu
             
     return model
 
-
-def train_3d_model_alt(
-    dataset, 
-    event_class_weights, 
-    goal_pos_weight, 
-    epochs=config.NUM_EPOCHS, 
-    batch_size=config.BATCH_SIZE, 
-    lr=config.LR_3D,
-    loss_type='Focal'
-):
-    """
-    Trains the Tiny3DCNN_MultiTask model using the same masked loss logic
-    as the 2D threat models.
-    """
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    model = Tiny3DCNN_MultiTask().to(config.DEVICE)
-    
-    # 1. Standardize Loss Selection (Match the other functions)
-    if loss_type == 'Focal':
-        criterion_event = FocalLossThreat(alpha=event_class_weights.to(config.DEVICE), gamma=2.0)
-    else:
-        criterion_event = nn.CrossEntropyLoss(weight=event_class_weights.to(config.DEVICE))
-    
-    # Ensure goal_pos_weight is a tensor for BCEWithLogitsLoss
-    if not isinstance(goal_pos_weight, torch.Tensor):
-        goal_pos_weight = torch.tensor([goal_pos_weight], device=config.DEVICE)
-        
-    criterion_goal = nn.BCEWithLogitsLoss(pos_weight=goal_pos_weight)
-    
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    
-    model.train()
-    for epoch in range(epochs):
-        loop = tqdm(dataloader, desc=f"3D CNN Threat Epoch {epoch+1}")
-        total_epoch_loss = 0
-        
-        for voxels, event_targets, goal_targets in loop:
-            voxels = voxels.to(config.DEVICE)
-            event_targets = event_targets.to(config.DEVICE)
-            goal_targets = goal_targets.to(config.DEVICE)
-            
-            optimizer.zero_grad()
-            
-            # Forward pass (Input: Batch, Channels, Time, Height, Width)
-            event_logits, goal_logits = model(voxels)
-            
-            # 2. Event Head Loss
-            loss_event = criterion_event(event_logits, event_targets)
-            
-            # 3. Masked Goal Head Loss (CRITICAL CHANGE)
-            # Only calculate xG loss for events that are actually shots (Class 2)
-            shot_mask = (event_targets == 2)
-            if shot_mask.any():
-                loss_goal = criterion_goal(
-                    goal_logits[shot_mask].view(-1), 
-                    goal_targets[shot_mask].view(-1)
-                )
-            else:
-                # If no shots in this batch, loss is zero
-                loss_goal = torch.tensor(0.0, device=config.DEVICE)
-            
-            # 4. Total Loss with weighting (using config.LAMBDA_GOAL)
-            loss = loss_event + config.LAMBDA_GOAL * loss_goal
-            
-            loss.backward()
-            optimizer.step()
-            
-            total_epoch_loss += loss.item()
-            
-            # 5. Update Progress Bar
-            loop.set_postfix(
-                loss=f"{loss.item():.4f}", 
-                ev_loss=f"{loss_event.item():.4f}", 
-                gl_loss=f"{loss_goal.item():.4f}"
-            )
-            
-        avg_loss = total_epoch_loss / len(dataloader)
-        print(f"Epoch {epoch+1} Complete. Average Loss: {avg_loss:.4f}")
-        
-    return model
 
 def train_3d_model(
     dataset, 

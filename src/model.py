@@ -41,6 +41,7 @@ class TinyCNN_MultiTask_Threat(nn.Module):
         x = self.fc_shared(x)
         return self.fc_event(x), self.fc_goal(x).squeeze(-1)
     
+    
 # The Context Model
 #----------------------------------------
 class TinyCNN_MultiTask_Context_Threat(nn.Module):

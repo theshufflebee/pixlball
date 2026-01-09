@@ -5,29 +5,31 @@ import random
 import os
 
 def enforce_replicability(seed=42):
-    # 1. Basic Python and OS
+    """
+    This function sets all the needed seeds to ensure replicability over the whole project
+    """
+    # Basic Python and OS
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     
-    # 2. NumPy
+    # NumPy
     np.random.seed(seed)
     
-    # 3. PyTorch (CPU and GPU)
+    # PyTorch (CPU and GPU)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed) 
     
-    # 4. Hardware Determinism (CRITICAL)
+    # Hardware Determinism (CRITICAL)
     torch.backends.cudnn.deterministic = True  # Forces deterministic algorithms
     torch.backends.cudnn.benchmark = False      # Disables auto-tuner for consistency
     
-    # 5. New in PyTorch: Force deterministic algorithms
-    # This will throw an error if a layer doesn't support it, 
-    # alerting you to non-replicable operations.
+    # Force deterministic algorithms
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 def get_sequence_lengths(input_tensor):
-    """Calculates the true length of the sequence based on the mask channel (4th channel).
+    """
+    Calculates the true length of the sequence based on the mask channel (4th channel).
     
     Args:
         input_tensor (torch.Tensor): Shape (B, T, 4, H, W).
@@ -54,7 +56,7 @@ def get_multitask_loss_weights(nn_dataset, device):
     """
     event_targets = nn_dataset['nn_target_int'].values   # 0=keep, 1=lose, 2=shot
     
-    # 1. Event Head Weights (Smoothed Inverse Frequency)
+    # Event Head Weights (Smoothed Inverse Frequency)
     event_counts = Counter(event_targets)
     total_events = len(event_targets)
     num_classes = len(event_counts)
@@ -71,8 +73,8 @@ def get_multitask_loss_weights(nn_dataset, device):
     
     event_weights_tensor = torch.tensor(event_weights, dtype=torch.float32).to(device)
     
-    # 2. Goal Head Weight (Increased for higher Goal AUC)
-    # Moving from 5.0 to 12.0 helps the model focus more on the rare 'Goal' outcome
+    # Goal Head Weight 
+    # Moving higher helps the model focus more on the rare 'Goal' outcome
     STABLE_GOAL_POS_WEIGHT = 5.0
     goal_pos_weight_tensor = torch.tensor([STABLE_GOAL_POS_WEIGHT], dtype=torch.float32).to(device)
     
@@ -84,6 +86,12 @@ def get_multitask_loss_weights(nn_dataset, device):
 
 
 def perform_replicable_split(df, train_ratio=0.8, seed=42):
+    
+    """
+    This function does the train, test split for the Data. It splits on Matches, not on events to avoid
+    temporal leakage.
+    """
+    
     # Get unique Match IDs
     unique_matches = df['match_id'].unique()
     
