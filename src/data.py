@@ -654,6 +654,7 @@ def generate_temporal_voxels(df, lookback=3, grid_cols=['ball_layer', 'teammates
 def event_data_loader(data_events):
     """
     Main preprocessing pipeline for cleaning raw event data.
+    Loads Data, cleans its and assigns NN targets
     """
     df = data_events.copy()
     

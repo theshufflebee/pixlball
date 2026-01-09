@@ -50,6 +50,12 @@ def get_threat_model_and_criteria(model_type, event_class_weights, goal_pos_weig
             num_event_classes=config.NUM_EVENT_CLASSES,
             num_context_features=num_context_features
         ).to(config.DEVICE)
+        
+    elif model_type == '3d_threat':
+        model = Tiny3DCNN_MultiTask(
+            num_event_classes=config.NUM_EVENT_CLASSES
+        ).to(config.DEVICE)
+    
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
@@ -134,100 +140,6 @@ def train_multi_task_model(
 # ---------------------------------------------------------
 # Training Functions
 # ---------------------------------------------------------
-
-# CAN BE DELETET NOT USED ANYMORE
-def train_model_base_threat(dataset, event_class_weights, goal_pos_weight, loss_type='Focal'):
-    """Trains the TinyCNN_MultiTask_Threat model (Static Baseline)."""
-    
-    model, criterion_event, criterion_goal = get_threat_model_and_criteria(
-        'base_threat', event_class_weights, goal_pos_weight, loss_type=loss_type
-    )
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.LR)
-    train_loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=True)
-    
-    model.train()
-    for epoch in range(config.NUM_EPOCHS):
-        loop = tqdm(train_loader, desc=f"Base CNN Threat Epoch {epoch+1}")
-        for X, event_labels, goal_flags in loop:
-            X, event_labels, goal_flags = X.to(config.DEVICE), event_labels.to(config.DEVICE), goal_flags.to(config.DEVICE)
-            
-            optimizer.zero_grad()
-            event_logits, goal_logits = model(X)
-            
-            loss_event = criterion_event(event_logits, event_labels)
-            
-            shot_mask = (event_labels == 2)
-            if shot_mask.any():
-                loss_shot = criterion_goal(goal_logits[shot_mask].view(-1), goal_flags[shot_mask].view(-1))
-            else:
-                loss_shot = torch.tensor(0.0, device=config.DEVICE)
-            
-            loss = loss_event + config.LAMBDA_GOAL * loss_shot
-            loss.backward()
-            optimizer.step()
-            
-            loop.set_postfix(loss=f"{loss.item():.4f}", ev_loss=f"{loss_event.item():.4f}")
-            
-    return model
-
-
-# CAN BE DELETET NOT USED ANYMORE
-def train_model_context_threat(dataset, event_class_weights, goal_pos_weight, num_context_features=8, loss_type='Focal'):
-    """
-    Unified training function for Contextual CNNs. 
-    Handles any size of context_data (e.g., the 8-feature ball trajectory vector).
-    """
-    model, criterion_event, criterion_goal = get_threat_model_and_criteria(
-        'context_threat', 
-        event_class_weights, 
-        goal_pos_weight, 
-        num_context_features=num_context_features,
-        loss_type=loss_type
-    )
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.LR)
-    train_loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=True)
-    
-    model.train()
-    for epoch in range(config.NUM_EPOCHS):
-        loop = tqdm(train_loader, desc=f"Context CNN Epoch {epoch+1}")
-        
-        for X, context_data, event_labels, goal_flags in loop:
-            X = X.to(config.DEVICE)
-            context_data = context_data.to(config.DEVICE)
-            event_labels = event_labels.to(config.DEVICE)
-            goal_flags = goal_flags.to(config.DEVICE)
-            
-            optimizer.zero_grad()
-            
-            # Forward pass: uses spatial (X) and temporal context (context_data)
-            event_logits, goal_logits = model(X, context_data)
-            
-            loss_event = criterion_event(event_logits, event_labels)
-            
-            # Threat loss only on shots (Class 2)
-            shot_mask = (event_labels == 2)
-            if shot_mask.any():
-                loss_shot = criterion_goal(
-                    goal_logits[shot_mask].view(-1), 
-                    goal_flags[shot_mask].view(-1)
-                )
-            else:
-                loss_shot = torch.tensor(0.0, device=config.DEVICE)
-            
-            loss = loss_event + config.LAMBDA_GOAL * loss_shot
-            
-            loss.backward()
-            optimizer.step()
-            
-            loop.set_postfix(
-                loss=f"{loss.item():.4f}", 
-                ev_loss=f"{loss_event.item():.4f}", 
-                sh_loss=f"{loss_shot.item():.4f}"
-            )
-            
-    return model
 
 
 def train_3d_model(

@@ -5,20 +5,6 @@ import torch.nn.functional as F
 # -----------------
 # Custom Focal Loss (Class definition remains the same)
 # -----------------
-class FocalLoss(nn.Module):
-    # ... (Your previous FocalLoss class implementation here) ...
-    def __init__(self, alpha=1, gamma=2, reduction='mean'):
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.reduction = reduction
-
-    def forward(self, inputs, targets):
-        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
-        pt = torch.exp(-ce_loss)
-        loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
-        return loss.mean() if self.reduction == 'mean' else loss.sum()
-    
 
 class FocalLossThreat(nn.Module):
     """
