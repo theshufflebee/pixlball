@@ -72,17 +72,17 @@ def download_sb_data(overview_df, download_360=True):
     print(f"Starting download for {len(match_ids)} matches...")
     
     for match_id in tqdm(match_ids, desc="Downloading SB Data", unit="match"):
-        # --- Download event data ---
+        # Download event data
         try:
             event_df = sb.events(match_id=match_id)
             event_df['match_id'] = match_id
             events_list.append(event_df)
         except Exception as e:
-            # We use tqdm.write so the print doesn't break the progress bar
+            # tqdm.write so the print doesn't break the progress bar
             tqdm.write(f"Failed to download events for match {match_id}: {e}")
             continue
 
-        # --- Download 360 data if requested ---
+        # Download 360 data if requested
         if download_360:
             try:
                 frame_df = sb.frames(match_id=match_id)
@@ -94,7 +94,7 @@ def download_sb_data(overview_df, download_360=True):
             except Exception as e:
                 tqdm.write(f"No 360 data for match {match_id}")
 
-    # --- SAVE DATA OUTSIDE THE LOOP ---
+    # Save Data
     if not os.path.exists('data'):
         os.makedirs('data')
 
@@ -116,12 +116,12 @@ def run_full_data_pipeline(competition_ids, season_ids, force_redownload=False):
     Orchestrates the fetching of match overviews and the downloading of 
     event/360 data into parquet files.
     """
-    # 1. Check if data already exists to save time
+    # Check if data already exists
     if not force_redownload and os.path.exists('data/events_data.parquet') and os.path.exists('data/sb360_data.parquet'):
         print("--- Local data found. Skipping download. ---")
         return None
 
-    # 2. Get Match Overview
+    # Get Match Overview
     print("--- Fetching Match Overviews ---")
     overview_df = get_match_overview(competition_ids, season_ids, requires_360=True)
    
@@ -129,10 +129,10 @@ def run_full_data_pipeline(competition_ids, season_ids, force_redownload=False):
         print("No matches found for the given criteria.")
         return None, None
 
-    # 3. Download Data
+    # Download Data
     events_list, frames_360_list = download_sb_data(overview_df, download_360=True)
     
-    # 4. Final Concatenation for Return
+    # Final Concatenation for Return
     df_events = pd.concat(events_list, ignore_index=True) if events_list else pd.DataFrame()
     df_360 = pd.concat(frames_360_list, ignore_index=True) if frames_360_list else pd.DataFrame()
     
@@ -149,17 +149,17 @@ def event_data_loader(data_events):
     """
     df = data_events.copy()
     
-    # 1. Define Administrative/Non-Game events to remove
+    # Define Administrative/Non-Game events to remove
     admin_events = [
         'Starting XI', 'Half Start', 'Half End', 'Player On', 'Player Off',
         'Substitution', 'Tactical Shift', 'Referee Ball-Drop', 'Injury Stoppage',
         'Bad Behaviour', 'Shield', 'Goal Keeper', 'Pressure', 'Duel'
     ]
 
-    # 2. Filter rows
+    # Filter rows
     df = drop_events(df, rows_to_drop=admin_events)
 
-    # 3. Define the specific StatsBomb metadata/detail columns to drop
+    # Define the specific StatsBomb metadata/detail columns to drop
     columns_to_drop = [
         'clearance_body_part', 'clearance_head', 'clearance_left_foot',
         'clearance_other', 'clearance_right_foot', 'shot_technique',
@@ -185,10 +185,10 @@ def event_data_loader(data_events):
         'ball recovery_offensive'
     ]
 
-    # 4. Drop the columns
+    # Drop the columns
     df = drop_columns(df, columns_to_drop)
 
-    # 5. Assign outcomes (Target variable generation)
+    # 5. Assign outcomes (Target variable)
     df = assign_lookahead_outcomes(df, lookahead=6)
 
     return df
@@ -208,11 +208,9 @@ def drop_events(events_df, rows_to_drop=None):
     
     Returns:
         pd.DataFrame: Cleaned and sorted dataframe
-    """
-    # Define non-play administrative events to drop
+    """   
     
-    
-    # Drop administrative events
+    # Drop events
     df_cleaned = events_df[~events_df['type'].isin(rows_to_drop)].copy()
     
     # Sort by match_id and index to maintain chronological order
@@ -255,14 +253,14 @@ def assign_lookahead_outcomes(events_df, lookback=6, lookahead=6):
     df = events_df.copy()
     df.sort_values(by=['match_id', 'possession', 'index'], inplace=True)
 
-    df['nn_target'] = 'Keep Possession'
+    df['nn_target'] = 'Keep Possession' # Base assignment
     df['goal_flag'] = 0
 
     for (match_id, possession), group in df.groupby(['match_id', 'possession'], sort=False):
         idxs = group.index.tolist()
         n = len(idxs)
 
-        # Step 1: Propagate shots/goals forward
+        # assign shot
         shot_events = group[group['type'].str.startswith('Shot')].index.tolist()
         for shot_idx in shot_events:
             start_idx = max(0, idxs.index(shot_idx) - lookahead + 1)
@@ -273,7 +271,7 @@ def assign_lookahead_outcomes(events_df, lookback=6, lookahead=6):
             if shot_row.get('shot_outcome', '') == 'Goal':
                 df.loc[shot_window, 'goal_flag'] = 1
 
-        # Step 2: Propagate Lose Possession backward from last event
+        # Propagate Lose Possession backward from last event of posession, but shot overwrites Lose Posession
         last_idx = idxs[-1]
         if df.loc[last_idx, 'nn_target'] == 'Keep Possession':
             # Last event is not a shot: mark as Lose Possession
@@ -287,7 +285,7 @@ def assign_lookahead_outcomes(events_df, lookback=6, lookahead=6):
             if df.loc[current_idx, 'nn_target'] == 'Keep Possession':
                 df.loc[current_idx, 'nn_target'] = 'Lose Possession'
             else:
-                # Stop if we hit a Shot
+                # Stop if hit a Shot
                 break
     print(f"counts of each outcome {df['nn_target'].value_counts()}")
 
@@ -465,16 +463,16 @@ def prepare_nn_dataset(
 def add_ball_trajectory_features(events_df, steps_back=3):
     df = events_df.copy()
     
-    # 1. Get current coordinates
+    # Get current coordinates
     df['ball_x'] = df['location'].apply(lambda loc: loc[0] if isinstance(loc, list) else np.nan)
     df['ball_y'] = df['location'].apply(lambda loc: loc[1] if isinstance(loc, list) else np.nan)
 
-    # 2. Fill current NaNs first 
+    # Fill current NaNs first 
     # (Use ffill then bfill so every row has a 'current' ball position)
     df['ball_x'] = df.groupby('match_id')['ball_x'].ffill().bfill()
     df['ball_y'] = df.groupby('match_id')['ball_y'].ffill().bfill()
 
-    # 3. Create historical shifts
+    # Create historical shifts
     all_traj_cols = ['ball_x', 'ball_y']
     for i in range(1, steps_back + 1):
         x_col = f'ball_x_t-{i}'
@@ -484,14 +482,13 @@ def add_ball_trajectory_features(events_df, steps_back=3):
         df[x_col] = df.groupby('match_id')['ball_x'].shift(i)
         df[y_col] = df.groupby('match_id')['ball_y'].shift(i)
         
-        # KEY: Apply your logic. If the past is unknown, 
-        # assume the ball was at the CURRENT position (bfill)
+        # If the past is unknown, assume the ball was at the CURRENT position (bfill)
         df[x_col] = df[x_col].fillna(df['ball_x'])
         df[y_col] = df[y_col].fillna(df['ball_y'])
         
         all_traj_cols.extend([x_col, y_col])
 
-    # 4. Final Vector
+    # Final Vector
     df['ball_trajectory_vector'] = df[all_traj_cols].values.tolist()
     df['ball_trajectory_vector'] = df['ball_trajectory_vector'].apply(lambda x: np.array(x, dtype=np.float32))
 
@@ -552,7 +549,7 @@ def generate_temporal_voxels(df, lookback=3, grid_cols=['ball_layer', 'teammates
     """
     voxels = []
 
-    # 2. Group by match_id only
+    # Group by match_id only
     grouped = df.groupby('match_id')
     
     for _, group in grouped:
@@ -577,7 +574,7 @@ def generate_temporal_voxels(df, lookback=3, grid_cols=['ball_layer', 'teammates
                 available_frames = group_grids[0 : i + 1]
                 voxel = np.concatenate([padding, available_frames], axis=0)
             
-            # 3. Transpose to PyTorch Conv3D format: (Channels, Time, Height, Width)
+            # Transpose to PyTorch Conv3D format: (Channels, Time, Height, Width)
             # Input voxel is (T, C, H, W) -> Output is (C, T, H, W)
             voxel = np.transpose(voxel, (1, 0, 2, 3))
             voxels.append(voxel)
@@ -603,15 +600,15 @@ def add_ball_coordinates(df, column_name='ball_trajectory_vector'):
     if df[column_name].empty:
         return df
 
-    # 1. Determine the length from the first entry in the data
+    # Determine the length from the first entry in the data
     first_vector = df[column_name].iloc[0]
     vector_length = len(first_vector)
     num_points = vector_length // 2
 
-    # 2. Generate the column names dynamically: x1, y1, x2, y2...
+    # Generate the column names dynamically: x1, y1, x2, y2...
     vector_names = [f"{coord}{i}" for i in range(1, num_points + 1) for coord in ['x', 'y']]
 
-    # 3. Expand and concatenate to the original dataframe
+    # Expand and concatenate to the original dataframe
     expanded_coords = pd.DataFrame(
         df[column_name].tolist(), 
         index=df.index, 

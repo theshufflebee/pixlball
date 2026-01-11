@@ -95,7 +95,7 @@ class TinyCNN_MultiTask_Context_Threat(nn.Module):
 class TinyCNN_MultiTask_Context_Ball_Vector(nn.Module):
     def __init__(self, grid_height=12, grid_width=8, num_event_classes=3, num_context_features=8):
         super().__init__()
-        # 1. Spatial Branch - EXACT MATCH to Baseline
+        # Spatial
         self.features = nn.Sequential(
             nn.Conv2d(3, 16, kernel_size=3, padding=1),
             nn.BatchNorm2d(16),
@@ -108,14 +108,14 @@ class TinyCNN_MultiTask_Context_Ball_Vector(nn.Module):
         )
         self.cnn_flat_size = 32 * 3 * 2 # Standardized for 12x8
         
-        # 2. Kinetic Context Branch
+        # Kinetic Context
         self.fc_context = nn.Sequential(
             nn.Linear(num_context_features, 32),
             nn.LeakyReLU(0.1),
             nn.Dropout(0.2)
         )
         
-        # 3. Shared Fusion
+        # Shared
         self.fc_shared = nn.Sequential(
             nn.Linear(self.cnn_flat_size + 32, 128),
             nn.BatchNorm1d(128),
@@ -142,13 +142,13 @@ class Tiny3DCNN_MultiTask(nn.Module):
     def __init__(self, num_event_classes=3):
         super().__init__()
         
-        # 1. Spatiotemporal Feature Extractor
+        # Spatiotemporal Feature Extractor
         self.features = nn.Sequential(
             # Layer 1: Capture early motion
             nn.Conv3d(3, 16, kernel_size=(3, 3, 3), padding=1),
             nn.BatchNorm3d(16),
             nn.LeakyReLU(0.1),
-            # KEY CHANGE: Temporal Compression (2, 2, 2)
+            # Temporal Compression (2, 2, 2)
             # This reduces Time (4->2) and Space (12x8 -> 6x4) early
             nn.MaxPool3d(kernel_size=(2, 2, 2)), 
             
@@ -156,7 +156,7 @@ class Tiny3DCNN_MultiTask(nn.Module):
             nn.Conv3d(16, 32, kernel_size=(3, 3, 3), padding=1),
             nn.BatchNorm3d(32),
             nn.LeakyReLU(0.1),
-            # KEY CHANGE: Final compression to a 1D temporal state
+            # Final compression to a 1D temporal state
             # Time (2->1), Space (6x4 -> 3x2)
             nn.MaxPool3d(kernel_size=(2, 2, 2))
         )
@@ -174,14 +174,13 @@ class Tiny3DCNN_MultiTask(nn.Module):
         self.event_head = nn.Linear(128, num_event_classes)
         self.goal_head = nn.Linear(128, 1)
 
-        # 2. KEY CHANGE: Kaiming (He) Initialization
+        # Kaiming (He) Initialization
         # This prevents "Dying Neurons" before the first epoch even finishes
         self._initialize_weights()
 
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv3d) or isinstance(m, nn.Linear):
-                # Kaiming Normal is optimal for LeakyReLU
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='leaky_relu')
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)

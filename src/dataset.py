@@ -5,20 +5,19 @@ import numpy as np
 class PitchDatasetMultiTask(Dataset):
     def __init__(self, nn_layers_df, event_targets, goal_flags):
         
-        # 1. Prepare data as a list of stacked NumPy arrays
+        # Prepare data as a list of stacked NumPy arrays
         layers_list = [
             np.stack([row['ball_layer'], row['teammates_layer'], row['opponents_layer']], axis=0)
             for _, row in nn_layers_df.iterrows()
         ]
         
-        # 2. CRITICAL FIX: Convert the list to a single NumPy array (fast operation)
         # This converts the list of (3, 12, 8) arrays into one large (N, 3, 12, 8) array.
         layers_array = np.array(layers_list, dtype=np.float32)
         
-        # 3. Convert the single NumPy array to a PyTorch tensor (fast operation)
+        # Convert the single NumPy array to a PyTorch tensor (fast operation)
         self.layers = torch.tensor(layers_array)
         
-        # Targets (Ensure goal_flags is float for BCEWithLogitsLoss)
+        # Targets
         self.event_targets = torch.tensor(event_targets, dtype=torch.long)
         self.goal_flags = torch.tensor(goal_flags, dtype=torch.float32)
 
@@ -30,10 +29,10 @@ class PitchDatasetMultiTask(Dataset):
     
     
 class ContextPitchDatasetMultiTask(Dataset):
-    # CRITICAL: Added contextual_features_df to the signature
+    # Added contextual features
     def __init__(self, nn_layers_df, event_targets, goal_flags, contextual_features_df):
         
-        # --- 1. Spatial Layers (Same as before) ---
+        # Spatial Layers
         layers_list = [
             np.stack([row['ball_layer'], row['teammates_layer'], row['opponents_layer']], axis=0)
             for _, row in nn_layers_df.iterrows()
@@ -41,12 +40,11 @@ class ContextPitchDatasetMultiTask(Dataset):
         layers_array = np.array(layers_list, dtype=np.float32)
         self.layers = torch.tensor(layers_array)
         
-        # --- 2. Contextual Features (NEW) ---
         # Convert the context DataFrame values directly to a PyTorch tensor
         context_array = np.array(contextual_features_df.values, dtype=np.float32)
         self.context_features = torch.tensor(context_array)
         
-        # --- 3. Targets (Same as before) ---
+        # Targets
         self.event_targets = torch.tensor(event_targets, dtype=torch.long)
         self.goal_flags = torch.tensor(goal_flags, dtype=torch.float32)
 
@@ -54,21 +52,20 @@ class ContextPitchDatasetMultiTask(Dataset):
         return len(self.event_targets)
 
     def __getitem__(self, idx):
-        # CRITICAL: Return four items now
         return self.layers[idx], self.context_features[idx], self.event_targets[idx], self.goal_flags[idx]
     
 
 class ContextBallVectorPitchDatasetMultiTask(Dataset):
     def __init__(self, nn_layers_df, event_targets, goal_flags, contextual_features_df):
-        # 1. Spatial Grids
+        # Spatial Grids
         self.ball_layers = np.stack(nn_layers_df['ball_layer'].values)
         self.team_layers = np.stack(nn_layers_df['teammates_layer'].values)
         self.opp_layers = np.stack(nn_layers_df['opponents_layer'].values)
         
-        # 2. Context Vector
+        # Context Vector
         self.context_data = contextual_features_df.values.astype(np.float32)
         
-        # 3. Targets
+        # Targets
         self.event_targets = torch.tensor(event_targets, dtype=torch.long)
         self.goal_targets = torch.tensor(goal_flags, dtype=torch.float32)
 
@@ -94,11 +91,11 @@ class VoxelPitchDataset(Dataset):
     def __init__(self, df, voxel_col='temporal_voxel'):
         self.df = df
         
-        # 1. Memory Win: Store as uint8 (1 byte per element instead of 4)
-        # We stack the voxels but keep them as small integers
+        # Memory: Store as uint8
+        # Stack the voxels
         self.voxels = np.stack(df[voxel_col].values).astype(np.uint8)
         
-        # 2. Convert targets to tensors once during init for speed
+        # Convert targets to tensors
         self.event_targets = torch.tensor(df['nn_target_int'].values, dtype=torch.long)
         self.goal_targets = torch.tensor(df['goal_flag'].values, dtype=torch.float32)
 
@@ -106,8 +103,7 @@ class VoxelPitchDataset(Dataset):
         return len(self.voxels)
 
     def __getitem__(self, idx):
-        # 3. Cast to float32 only for the specific batch item being loaded
-        # This keeps the total 'active' float memory very small
+        # Cast to float32 only for the specific batch item being loaded
         voxel_tensor = torch.from_numpy(self.voxels[idx]).float()
         
         return (

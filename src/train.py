@@ -20,7 +20,7 @@ def get_threat_model_and_criteria(model_type, event_class_weights, goal_pos_weig
     """
     Initializes a new _threat model and the corresponding loss criteria.
     """
-    # 1. Initialize Loss Criteria
+    # Initialize Loss Criteria
     if loss_type == 'Focal':
         criterion_event = FocalLossThreat(alpha=event_class_weights, gamma=2.0)
     else:
@@ -32,7 +32,7 @@ def get_threat_model_and_criteria(model_type, event_class_weights, goal_pos_weig
         
     criterion_goal = nn.BCEWithLogitsLoss(pos_weight=goal_pos_weight)
 
-    # 2. Initialize Model Architecture
+    # Initialize Model Architecture
     if model_type == 'base_threat':
         model = TinyCNN_MultiTask_Threat(
             grid_height=config.GRID_HEIGHT,
@@ -92,7 +92,7 @@ def train_multi_task_model(
         loop = tqdm(train_loader, desc=f"{model_name} Epoch {epoch+1}")
         
         for batch in loop:
-            # Step 1: Dynamic Unpacking
+            # Dynamic Unpacking
             # Handles (X, ev, gl) OR (X, ctx, ev, gl)
             if len(batch) == 3:
                 inputs, event_labels, goal_flags = batch
@@ -107,7 +107,7 @@ def train_multi_task_model(
             event_labels = event_labels.to(config.DEVICE)
             goal_flags = goal_flags.to(config.DEVICE)
 
-            # Step 2: Training Step
+            # Training Step
             optimizer.zero_grad()
             
             # Forward pass using unpacked arguments
@@ -117,6 +117,7 @@ def train_multi_task_model(
             loss_event = criterion_event(event_logits, event_labels)
             
             # Masked Goal Loss (Only for Shots/Class 2)
+            # Model only learns from true goal observations
             shot_mask = (event_labels == 2)
             if shot_mask.any():
                 loss_goal = criterion_goal(
@@ -155,8 +156,7 @@ def train_3d_model(
     Fixed 3D training function. 
     Uses the standardized helper to avoid instantiation type errors.
     """
-    # 1. Use the helper to get the model and criteria (Add '3d_threat' to your helper if needed)
-    # For now, we will instantiate manually but safely:
+    # Instantiate manually
     model = Tiny3DCNN_MultiTask(num_event_classes=config.NUM_EVENT_CLASSES).to(config.DEVICE)
     
     if loss_type == 'Focal':

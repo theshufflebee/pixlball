@@ -32,23 +32,22 @@ class FocalLossThreat(nn.Module):
         Target: Class labels (B).
         """
         
-        # 1. Calculate Standard Cross-Entropy Loss (unreduced)
-        # We use the standard PyTorch function for numerical stability (LogSumExp)
+        # Calculate Standard Cross-Entropy Loss (unreduced)
+        # Use the standard PyTorch function for numerical stability (LogSumExp)
         # Note: F.cross_entropy handles the weight (alpha) internally if provided.
         ce_loss = F.cross_entropy(input, target, weight=self.alpha, reduction='none')
         
-        # 2. Calculate p_t (Probability of the correct class)
+        # Calculate p_t (Probability of the correct class)
         # p_t = exp(-ce_loss) is the numerically stable way to calculate p_t from ce_loss
         pt = torch.exp(-ce_loss) 
 
-        # 3. Calculate the Focal Term
-        # Focal Term: (1 - p_t)^gamma
+        # Calculate the Focal Term
         focal_term = (1 - pt) ** self.gamma
         
-        # 4. Final Focal Loss
+        # Final Focal Loss
         loss = focal_term * ce_loss
 
-        # 5. Apply Reduction
+        # Apply Reduction
         if self.reduction == 'mean':
             return loss.mean()
         elif self.reduction == 'sum':
@@ -57,7 +56,7 @@ class FocalLossThreat(nn.Module):
             return loss
 
 # -----------------------------------------------
-# Loss Initialization Function (The Clean Solution)
+# Loss Initialization Function
 # -----------------------------------------------
 def get_model_criteria(event_class_weights, goal_pos_weight, loss_type='CE'):
     """
@@ -72,7 +71,7 @@ def get_model_criteria(event_class_weights, goal_pos_weight, loss_type='CE'):
         tuple: (criterion_event, criterion_goal)
     """
     
-    # 1. Event Loss (L1)
+    # Event Loss (L1)
     if loss_type == 'Focal':
         # Use your custom FocalLoss for the event classification (recommended for imbalance)
         criterion_event = FocalLossThreat(alpha=event_class_weights, gamma=2)
@@ -81,13 +80,8 @@ def get_model_criteria(event_class_weights, goal_pos_weight, loss_type='CE'):
         # Use standard CrossEntropyLoss with weights
         criterion_event = nn.CrossEntropyLoss(weight=event_class_weights)
 
-    # 2. Goal Loss (L2)
+    # Goal Loss (L2)
     # BCEWithLogitsLoss is the standard for binary classification (Goal/No Goal)
     criterion_goal = nn.BCEWithLogitsLoss(pos_weight=goal_pos_weight)
     
     return criterion_event, criterion_goal
-
-
-#-------------------------
-# Focal Loss for The other models
-# ----------------------------------
