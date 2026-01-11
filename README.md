@@ -38,7 +38,7 @@ Required for StatsBomb API access, parquet handling, and pitch visualization:
 ``pip install statsbombpy fastparquet mplsoccer python-snappy``
 
 3. Full Replication
-Alternatively, install the exact frozen environment used for the final study:
+Alternatively, install the requirements via:
 ``pip install -r requirements.txt``
 
 ## Data Management
