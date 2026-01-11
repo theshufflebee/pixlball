@@ -1,6 +1,142 @@
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
+from statsbombpy import sb
+import sys
+import os
+from tqdm import tqdm
+
+#-------------------------------------------------------
+# Raw Data Loading
+# --------------------------------------------------------
+
+
+def get_match_overview(competition_ids, season_ids, requires_360=False):
+    """
+    Returns a filtered overview of matches for multiple competition/season pairs.
+    
+    Parameters:
+        competition_ids (int or list): ID(s) of the competition(s)
+        season_ids (int or list): ID(s) of the season(s)
+        requires_360 (bool): If True, only return matches with 360 data
+    
+    Returns:
+        pd.DataFrame: Combined and filtered overview dataframe
+    """
+    # Convert single integers to lists to keep the logic unified
+    if isinstance(competition_ids, int):
+        competition_ids = [competition_ids]
+    if isinstance(season_ids, int):
+        season_ids = [season_ids]
+        
+    if len(competition_ids) != len(season_ids):
+        raise ValueError("The number of competition_ids must match the number of season_ids.")
+
+    all_matches = []
+
+    # Loop through each pair
+    for comp_id, seas_id in zip(competition_ids, season_ids):
+        try:
+            df = sb.matches(competition_id=comp_id, season_id=seas_id)
+            all_matches.append(df)
+        except Exception as e:
+            print(f"Warning: Could not fetch matches for Comp {comp_id}, Season {seas_id}: {e}")
+
+    if not all_matches:
+        return pd.DataFrame()
+
+    # Combine all fetched data
+    overview_df = pd.concat(all_matches, ignore_index=True)
+    
+    # Track 360 availability
+    overview_df['available_360'] = overview_df['match_status_360'].notna()
+
+    # --- Apply filters ---
+    if requires_360:
+        before_count = len(overview_df)
+        overview_df = overview_df[overview_df['available_360'] == True]
+        print(f"Dropped {before_count - len(overview_df)} matches without 360 data")
+
+    return overview_df.reset_index(drop=True)
+
+def download_sb_data(overview_df, download_360=True):
+    """
+    Download StatsBomb event and 360 data with a progress bar.
+    """
+    events_list = []
+    frames_360_list = []
+    
+    # Initialize the progress bar based on the number of matches
+    match_ids = overview_df['match_id'].unique()
+    
+    print(f"Starting download for {len(match_ids)} matches...")
+    
+    for match_id in tqdm(match_ids, desc="Downloading SB Data", unit="match"):
+        # --- Download event data ---
+        try:
+            event_df = sb.events(match_id=match_id)
+            event_df['match_id'] = match_id
+            events_list.append(event_df)
+        except Exception as e:
+            # We use tqdm.write so the print doesn't break the progress bar
+            tqdm.write(f"Failed to download events for match {match_id}: {e}")
+            continue
+
+        # --- Download 360 data if requested ---
+        if download_360:
+            try:
+                frame_df = sb.frames(match_id=match_id)
+                if 'visible_area' in frame_df.columns:
+                    frame_df = frame_df.drop(columns=['visible_area'])
+                
+                frame_df['match_id'] = match_id
+                frames_360_list.append(frame_df)
+            except Exception as e:
+                tqdm.write(f"No 360 data for match {match_id}")
+
+    # --- SAVE DATA OUTSIDE THE LOOP ---
+    if not os.path.exists('data'):
+        os.makedirs('data')
+
+    if events_list:
+        print("\nConcatenating and saving events...")
+        df_events = pd.concat(events_list, ignore_index=True)
+        df_events.to_parquet('data/events_data.parquet', engine="fastparquet")
+        
+    if frames_360_list:
+        print("Concatenating and saving 360...")
+        df_360 = pd.concat(frames_360_list, ignore_index=True)
+        df_360.to_parquet('data/sb360_data.parquet', engine="fastparquet")
+
+    print("Pipeline Complete.")
+    return events_list, frames_360_list
+
+def run_full_data_pipeline(competition_ids, season_ids, force_redownload=False):
+    """
+    Orchestrates the fetching of match overviews and the downloading of 
+    event/360 data into parquet files.
+    """
+    # 1. Check if data already exists to save time
+    if not force_redownload and os.path.exists('data/events_data.parquet') and os.path.exists('data/sb360_data.parquet'):
+        print("--- Local data found. Skipping download. ---")
+        return None
+
+    # 2. Get Match Overview
+    print("--- Fetching Match Overviews ---")
+    overview_df = get_match_overview(competition_ids, season_ids, requires_360=True)
+   
+    if overview_df.empty:
+        print("No matches found for the given criteria.")
+        return None, None
+
+    # 3. Download Data
+    events_list, frames_360_list = download_sb_data(overview_df, download_360=True)
+    
+    # 4. Final Concatenation for Return
+    df_events = pd.concat(events_list, ignore_index=True) if events_list else pd.DataFrame()
+    df_360 = pd.concat(frames_360_list, ignore_index=True) if frames_360_list else pd.DataFrame()
+    
+    return None
 
 #--------------------------------------------------------
 # Event Data Cleaning
@@ -84,7 +220,7 @@ def drop_events(events_df, rows_to_drop=None):
     
     # Reset index
     df_cleaned.reset_index(drop=True, inplace=True)
-    print(f"{len(events_df) - len(df_cleaned)} events.")
+    print(f"Dropped {len(events_df) - len(df_cleaned)} events. Df now has {len(df_cleaned)} events")
     
     return df_cleaned
 

@@ -3,7 +3,8 @@ import sys
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
+import numpy as np
 
 # 1. Handle Pathing
 # Dynamically locate the repository root to ensure imports work across environments
@@ -37,9 +38,20 @@ import src.utils as utils
 import src.losses as losses
 import src.plotfunctions as plotfunctions
 
+
+
+import pandas as pd
+from statsbombpy import sb
+import os
+from tqdm import tqdm
+
+
+
 def main():
     print(f"--- Starting Pixlball Workflow (Repo Root: {repo_root}) ---")
     utils.enforce_replicability(42)
+    
+    data.run_full_data_pipeline(config.COMP_IDS, config.SEAS_IDS, force_redownload=config.FORCE_REDOWNLOAD)
 
     # ---------------------------------------------------------
     # Step 1: Data Ingestion & Preprocessing
@@ -222,18 +234,37 @@ def main():
     ############################################################################################
     
     print("\n--- Training 3D Voxel Model ---")
-    # Regenerate voxels specifically for 3D architecture
+    
+    # generate voxels and perform a fresh split to ensure alignment
     voxels_list = data.generate_temporal_voxels(nn_dataset, lookback=3)
     nn_dataset['temporal_voxel'] = voxels_list
     train_df_3d, val_df_3d = utils.perform_replicable_split(nn_dataset)
     
     train_ds_3d = dataset.VoxelPitchDataset(train_df_3d)
     val_ds_3d = dataset.VoxelPitchDataset(val_df_3d)
+    
+    # Calculate Sampler weights using the 3D dataframe
+    targets_3d = train_df_3d['nn_target_int'].values
+    class_counts = np.bincount(targets_3d)
+    class_weights_3d = 1. / class_counts
+    sample_weights = torch.from_numpy(class_weights_3d[targets_3d]).double()
 
+    # Create the Sampler
+    sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
+
+    # Define UNWEIGHTED Loss for 3D
+    criterion_ev_3d = losses.FocalLossThreat(alpha=None, gamma=2.0)
+    
+    # Initialize and Train
     voxel_model = model.Tiny3DCNN_MultiTask(config.NUM_EVENT_CLASSES).to(config.DEVICE)
     voxel_model = train.train_multi_task_model(
-        voxel_model, DataLoader(train_ds_3d, batch_size=config.BATCH_SIZE, shuffle=True),
-        criterion_ev, criterion_gl, config.VOXEL_NUM_EPOCHS, "3D-Voxel", lr=config.LR_3D
+        voxel_model, 
+        DataLoader(train_ds_3d, batch_size=config.BATCH_SIZE, sampler=sampler),
+        criterion_ev_3d,   # Use the unweighted version!
+        criterion_gl,      # Keep the goal weight (xG is still imbalanced)
+        config.VOXEL_NUM_EPOCHS, 
+        "3D-Voxel", 
+        lr=config.LR_3D
     )
     
     # Get Metrics

@@ -1,25 +1,54 @@
-This repository contains a multi-task deep learning framework designed to quantify possession utility in
-professional football using StatsBomb data.
+# Pixlball: Multi-Task Possession Utility Prediction
 
+This repository contains a multi-task deep learning framework designed to quantify possession utility in professional football using StatsBomb 360 data.
+
+## Project Structure
+```text
 pixlball/
-├─ src/                     # Core project source code
-│  ├─ config.py             # Constants, paths, and hyperparameters
-│  ├─ data.py               # Data loading and cleaning pipeline
-│  ├─ dataset.py            # PyTorch Dataset classes (Spatial, Kinetic, and 3D)
-│  ├─ evaluate.py           # Evaluation suite (Recall, Balanced Acc, Goal AUC)
-│  ├─ losses.py             # Custom Focal Loss for class imbalance
-│  ├─ model.py              # CNN definitions (Baseline, Context, Kinetic, Voxel)
-│  ├─ plotfunctions.py      # Visualizations (Confusion Matrices, xT Maps)
-│  ├─ train.py              # Unified training loop with masked loss logic
-│  ├─ utils.py              # Path management and grid assignment
-│  └─ xt_benchmark_gen.py   # Expected Threat (xT) baseline comparison
+├─ report/                  # Project documentation
+│  └─ ada_pixlball.pdf      # Final research report (SIAM Style)
+├─ src/                     # Core source code
+│  ├─ config.py             # Hyperparameters (Gamma, Lambda_Goal, Seed)
+│  ├─ data.py               # StatsBomb API ingestion pipeline
+│  ├─ dataset.py            # PyTorch Datasets (Spatial, Kinetic, 3D)
+│  ├─ evaluate.py           # Metrics (Balanced Acc, Shot Recall, Goal AUC)
+│  ├─ losses.py             # Focal Loss implementation
+│  ├─ model.py              # CNN Architectures
+│  ├─ plotfunctions.py      # Confusion Matrix & xT generators
+│  ├─ train.py              # Training loop logic
+│  ├─ utils.py              # Grid assignment & replicability tools
+│  └─ xt_benchmark_gen.py   # Baseline xT comparison
 ├─ data/                    # Local storage (Ignored by Git)
-│  ├─ events_data.parquet   # Raw StatsBomb event data
-│  └─ sb360_data.parquet    # Raw StatsBomb 360 spatial data
-├─ notebooks/               # Experimental Jupyter Notebooks
-│  ├─ 00_setup.ipynb        # Initial environment and data check
-│  ├─ 01_MASTER.ipynb       # Main execution script and results generator
-│  ├─ figures/              # Generated plots and confusion matrices
-│  └─ model_comparison_table.csv # Final exported metrics
-├─ requirements.txt         # Project dependencies (frozen for replicability)
-└─ main.py                  # Script to run the full workflow
+│  ├─ events_data.parquet   # Processed events
+│  └─ sb360_data.parquet    # Processed 360-frames
+├─ figures/                 # Exported plots for the report
+├─ notebooks/               # Research & Exploration
+│  ├─ 00_setup.ipynb        # Environment validation
+│  └─ 01_MASTER.ipynb       # Results generation & Table export
+├─ requirements.txt         # Frozen dependencies
+└─ main.py                  # Entry point for full workflow
+```
+## Installation
+1. Base Dependencies
+Install the core machine learning and data processing libraries: 
+``pip install torch torchvision pandas numpy scikit-learn matplotlib seaborn tqdm``
+
+2. Specialized Packages
+Required for StatsBomb API access, parquet handling, and pitch visualization:
+``pip install statsbombpy fastparquet mplsoccer python-snappy``
+
+3. Full Replication
+Alternatively, install the exact frozen environment used for the final study:
+``pip install -r requirements.txt``
+
+## Data Management
+The dataset is fetched via the StatsBomb API and cached locally as Parquet files to optimize storage and loading speed.
+
+Replication Note: Since the StatsBomb API is live and data can be updated by the provider, it is recommended to use the provided .parquet files for exact replication of report metrics.
+
+Redownloading: To refresh the local cache from the source, set FORCE_REDOWNLOAD = True in main.py.
+
+## Execution
+Once the environment is configured, execute the full end-to-end workflow (Data Ingestion -> Training -> Evaluation -> Plotting) by running:
+
+``python main.py``
