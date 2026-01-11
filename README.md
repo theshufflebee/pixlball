@@ -46,7 +46,7 @@ The dataset is fetched via the StatsBomb API and cached locally as Parquet files
 
 Replication Note: Since the StatsBomb API is live and data can be updated by the provider, it is recommended to use the provided .parquet files for exact replication of report metrics.
 
-Redownloading: To refresh the local cache from the source, set FORCE_REDOWNLOAD = True in main.py.
+Redownloading: To refresh the local cache from the source, set FORCE_REDOWNLOAD = True in config.py.
 
 ## Execution
 Once the environment is configured, execute the full end-to-end workflow (Data Ingestion -> Training -> Evaluation -> Plotting) by running:
